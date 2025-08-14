@@ -28,14 +28,20 @@ extern string valueParams[];
 //+------------------------------------------------------------------+
 //| Generate a pseudo-ticket for simulated trades                     |
 //+------------------------------------------------------------------+
-string GeneratePseudoTicket()
+
+ulong GeneratePseudoTicket()
 {
    static int counter = 0; // Ensure uniqueness
    int random = MathRand();
    int ticketNum = (int)(TimeCurrent() % 1000000 + random + counter++) % 1000000; // 6-digit number
-   string ticket = StringFormat("S%06d", ticketNum); // Prefix with "S", ensure 7 characters
-   return ticket;
+   return (ulong)ticketNum; // Return numeric value as ulong
 }
+
+string GetPrefixedPseudoTicket(ulong ticketNum)
+{
+   return StringFormat("S%06d", (int)ticketNum % 1000000); // Ensure 6-digit format with "S" prefix
+}
+
 //+------------------------------------------------------------------+
 //| Write simulated position to file                                  |
 //+------------------------------------------------------------------+
