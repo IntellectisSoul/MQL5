@@ -20,6 +20,11 @@ extern bool headersWritten;
 extern string headerParams[];
 extern string valueParams[];
 
+
+/* XXXXXX-
+   14.Aug.2025 :Fixed writing of SiMULATED to csv.
+   
+   */
 //+------------------------------------------------------------------+
 //| Generate a pseudo-ticket for simulated trades                     |
 //+------------------------------------------------------------------+
@@ -35,166 +40,177 @@ string GeneratePseudoTicket()
 //| Write simulated position to file                                  |
 //+------------------------------------------------------------------+
 void WriteSimulatedPositionToFile(string symbol, string ticket, string purpose, string alertComment, 
-                                  int alertSwitch, int alertSwitchPrev, int triggerEntryDirection, 
-                                  double openPrice, double closePrice, double lotSize)
+                                 int alertSwitch, int alertSwitchPrev, int triggerEntryDirection, 
+                                 double openPrice, double closePrice, double lotSize)
 {
-   if(csvTradeLog_fileName == "")
-   {
-      csvTradeLog_fileName = "PositionLog_" + symbol + ".csv";
-      csvTradeLog_handle = FileOpen(csvTradeLog_fileName, FILE_WRITE|FILE_CSV|FILE_COMMON, "\t");
-      if(csvTradeLog_handle == INVALID_HANDLE)
-      {
-         LogSymbolToFile("WriteSimulatedPositionToFile: Failed to open file " + csvTradeLog_fileName + 
-                         ", error=" + IntegerToString(GetLastError()));
-         return;
-      }
-      
-      if(!headersWritten)
-      {
-         string headerLine = "";
-         for(int i = 0; i < ArraySize(headerParams); i++)
-         {
-            headerLine += headerParams[i];
-            if(i < ArraySize(headerParams) - 1) headerLine += "\t";
-         }
-         FileWrite(csvTradeLog_handle, headerLine);
-         headersWritten = true;
-         LogSymbolToFile("WriteSimulatedPositionToFile: Wrote headers to " + csvTradeLog_fileName);
-      }
-      FileClose(csvTradeLog_handle);
-   }
+    // Prepare all data before opening file
+    ArrayResize(valueParams, ArraySize(headerParams));
+    
+    // Populate all data fields
+    valueParams[0] = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES);
+    valueParams[1] = symbol;
+    valueParams[2] = ticket;
+    valueParams[3] = (alertComment == "") ? "None" : alertComment;
+    valueParams[4] = IntegerToString(alertSwitch);
+    valueParams[5] = IntegerToString(alertSwitchPrev);
+    valueParams[6] = IntegerToString(triggerEntryDirection);
+    valueParams[7] = "7"; // MagicNo for simulated trades
+    valueParams[8] = DoubleToString(openPrice, _Digits);
+    valueParams[9] = DoubleToString(openPrice, _Digits);
+    valueParams[10] = DoubleToString(openPrice, _Digits);
+    valueParams[11] = "0";
+    valueParams[12] = DoubleToString(lotSize, 2);
+    valueParams[13] = "0.00";
+    valueParams[14] = "0.00";
+    valueParams[15] = "0.00";
+    valueParams[16] = (purpose == "" || purpose == "Closed Position") ? 
+                     GetPurposeFromTriggerEntryDirection(triggerEntryDirection) : purpose;
+    
+    // Fill remaining fields with defaults
+    for(int i = 17; i < ArraySize(valueParams); i++)
+    {
+        if(valueParams[i] == "" || StringLen(valueParams[i]) == 0)
+        {
+            if(StringFind(headerParams[i], "Time") >= 0)
+                valueParams[i] = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES);
+            else if(StringFind(headerParams[i], "Identifier") >= 0 || 
+                    StringFind(headerParams[i], "Type") >= 0 || 
+                    StringFind(headerParams[i], "Stoch_Xover") >= 0 || 
+                    StringFind(headerParams[i], "DeM_trendShiftResult") >= 0)
+                valueParams[i] = "None";
+            else
+                valueParams[i] = "0";
+        }
+    }
 
-   // Update trade-specific fields in valueParams
-   ArrayResize(valueParams, 141); // Ensure size matches headerParams
-   valueParams[0] = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES); // TimeServer
-   valueParams[1] = symbol;                                             // Symbol
-   valueParams[2] = ticket;                                             // Ticket (Sxxxxxx)
-   valueParams[3] = alertComment == "" ? "None" : alertComment;         // alertcomment
-   valueParams[4] = IntegerToString(alertSwitch);                       // alertswitch
-   valueParams[5] = IntegerToString(alertSwitchPrev);                   // alertswitchPrev
-   valueParams[6] = IntegerToString(triggerEntryDirection);             // Trigger_Entry
-   valueParams[7] = "7";                                                // MagicNo (simulated)
-   valueParams[8] = DoubleToString(openPrice, _Digits);                 // askPrice
-   valueParams[9] = DoubleToString(openPrice, _Digits);                 // CurrentPrice (use openPrice for open positions)
-   valueParams[10] = DoubleToString(openPrice, _Digits);                // OpenPrice
-   valueParams[11] = "0";                                               // ClosedPrice (empty for open positions)
-   valueParams[12] = DoubleToString(lotSize, 2);                        // LotSize
-   valueParams[13] = "0.00";                                            // swap
-   valueParams[14] = "0.00";                                            // commission
-   valueParams[15] = "0.00";                                            // P&L
-   valueParams[16] = (purpose == "" || purpose == "Closed Position") ? GetPurposeFromTriggerEntryDirection(triggerEntryDirection) : purpose; // TradePurpose
-   // Fields 17-140 are assumed to be already populated with global indicator values
-   for(int i = 17; i < ArraySize(valueParams); i++)
-   {
-      if(valueParams[i] == "" || StringLen(valueParams[i]) == 0)
-      {
-         valueParams[i] = "0"; // Default for numeric or boolean fields
-         if(StringFind(headerParams[i], "Time") >= 0)
-            valueParams[i] = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES); // For TimeLocal
-         else if(StringFind(headerParams[i], "Identifier") >= 0 || 
-                 StringFind(headerParams[i], "Type") >= 0 || 
-                 StringFind(headerParams[i], "Stoch_Xover") >= 0 || 
-                 StringFind(headerParams[i], "DeM_trendShiftResult") >= 0)
-            valueParams[i] = "None"; // For string fields
-      }
-   }
-   if(!WriteFile_EntryData(valueParams, StringToInteger(StringSubstr(ticket, 1)), csvTradeLog_handle)) // Convert Sxxxxx to integer
-  
-   {
-      LogSymbolToFile("WriteSimulatedPositionToFile: Failed to write simulated position: " + ticket);
-   }
-   else
-   {
-      LogSymbolToFile("WriteSimulatedPositionToFile: Successfully wrote simulated position: " + ticket + 
-                      ", purpose=" + valueParams[16] + ", alertcomment=" + alertComment + 
-                      ", alertswitch=" + IntegerToString(alertSwitch) + 
-                      ", Trigger_EntryDirection=" + IntegerToString(triggerEntryDirection));
-   }
+    // Build the complete data line
+    string dataLine = "";
+    for(int i = 0; i < ArraySize(valueParams); i++)
+    {
+        dataLine += valueParams[i];
+        if(i < ArraySize(valueParams) - 1) dataLine += "\t";
+    }
+
+    // Atomic file operation
+    int handle = FileOpen(csvTradeLog_fileName, FILE_READ|FILE_WRITE|FILE_CSV|FILE_COMMON|FILE_ANSI, "\t");
+    if(handle != INVALID_HANDLE)
+    {
+        // Move to end (in case someone else wrote to the file)
+        FileSeek(handle, 0, SEEK_END);
+        
+        // Check if we need headers (first write)
+        if(FileTell(handle) == 0)
+        {
+            string headerLine = "";
+            for(int i = 0; i < ArraySize(headerParams); i++)
+            {
+                headerLine += headerParams[i];
+                if(i < ArraySize(headerParams) - 1) headerLine += "\t";
+            }
+            FileWrite(handle, headerLine);
+        }
+        
+        // Write the data
+        if(FileWrite(handle, dataLine) > 0)
+        {
+            FileFlush(handle); // Force write to disk
+            LogSymbolToFile("Successfully wrote position: " + ticket);
+        }
+        else
+        {
+            LogSymbolToFile("Write failed for ticket: " + ticket + ", error: " + IntegerToString(GetLastError()));
+        }
+        
+        FileClose(handle);
+    }
+    else
+    {
+        LogSymbolToFile("Failed to open file: " + csvTradeLog_fileName + ", error: " + IntegerToString(GetLastError()));
+    }
 }
 
 //+------------------------------------------------------------------+
 //| Write simulated closed position to file                           |
 //+------------------------------------------------------------------+
-
 void WriteSimulatedClosedPositionToFile(string symbol, string ticket, string purpose, 
                                        string alertComment, int alertSwitch, 
                                        int alertSwitchPrev, int triggerEntryDirection, 
                                        double openPrice, double closePrice, double lotSize)
 {
-   if(csvTradeLog_fileName == "")
-   {
-      csvTradeLog_fileName = "PositionLog_" + symbol + ".csv";
-      csvTradeLog_handle = FileOpen(csvTradeLog_fileName, FILE_WRITE|FILE_CSV|FILE_COMMON, "\t");
-      if(csvTradeLog_handle == INVALID_HANDLE)
-      {
-         LogSymbolToFile("WriteSimulatedClosedPositionToFile: Failed to open file " + 
-                         csvTradeLog_fileName + ", error=" + IntegerToString(GetLastError()));
-         return;
-      }
-      
-      if(!headersWritten)
-      {
-         string headerLine = "";
-         for(int i = 0; i < ArraySize(headerParams); i++)
-         {
-            headerLine += headerParams[i];
-            if(i < ArraySize(headerParams) - 1) headerLine += "\t";
-         }
-         FileWrite(csvTradeLog_handle, headerLine);
-         headersWritten = true;
-         LogSymbolToFile("WriteSimulatedClosedPositionToFile: Wrote headers to " + csvTradeLog_fileName);
-      }
-      FileClose(csvTradeLog_handle);
-   }
+    // Prepare all data before opening file
+    ArrayResize(valueParams, ArraySize(headerParams));
+    
+    // Calculate P&L
+    int positionType = (closePrice > openPrice) ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;
+    double pl = CalculatePnL(openPrice, closePrice, lotSize, positionType, 0.00, 0.00);
 
-   // Update trade-specific fields in valueParams
-   ArrayResize(valueParams, 141); // Ensure size matches headerParams
-   valueParams[0] = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES); // TimeServer
-   valueParams[1] = symbol;                                             // Symbol
-   valueParams[2] = ticket;                                             // Ticket (Sxxxxxx or existing position ticket)
-   valueParams[3] = alertComment == "" ? "None" : alertComment;         // alertcomment
-   valueParams[4] = IntegerToString(alertSwitch);                       // alertswitch
-   valueParams[5] = IntegerToString(alertSwitchPrev);                   // alertswitchPrev
-   valueParams[6] = IntegerToString(triggerEntryDirection);             // Trigger_Entry
-   valueParams[7] = "7";                                                // MagicNo (simulated)
-   valueParams[8] = "0.0";                                              // askPrice
-   valueParams[9] = "0.0";                                              // CurrentPrice
-   valueParams[10] = DoubleToString(openPrice, _Digits);                // OpenPrice
-   valueParams[11] = DoubleToString(closePrice, _Digits);               // ClosePrice
-   valueParams[12] = DoubleToString(lotSize, 2);                        // LotSize
-   valueParams[13] = "0.00";                                            // swap
-   valueParams[14] = "0.00";                                            // commission
-   // Calculate P&L using existing CalculatePnL function
-   int positionType = (closePrice > openPrice) ? POSITION_TYPE_BUY : POSITION_TYPE_SELL; // Simulate direction
-   double pl = CalculatePnL(openPrice, closePrice, lotSize, positionType, 0.00, 0.00); // Swap and commission set to 0
-   valueParams[15] = DoubleToString(pl, 2);                             // P&L
-   valueParams[16] = (purpose == "" || purpose == "Closed Position") ? GetPurposeFromTriggerEntryDirection(triggerEntryDirection) : purpose; // TradePurpose
-   // Fields 17-140 are assumed to be already populated with global indicator values
-   for(int i = 17; i < ArraySize(valueParams); i++)
-   {
-      if(valueParams[i] == "" || StringLen(valueParams[i]) == 0)
-      {
-         valueParams[i] = "0"; // Default for numeric or boolean fields
-         if(StringFind(headerParams[i], "Time") >= 0)
-            valueParams[i] = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES); // For TimeLocal
-         else if(StringFind(headerParams[i], "Identifier") >= 0 || 
-                 StringFind(headerParams[i], "Type") >= 0 || 
-                 StringFind(headerParams[i], "Stoch_Xover") >= 0 || 
-                 StringFind(headerParams[i], "DeM_trendShiftResult") >= 0)
-            valueParams[i] = "None"; // For string fields
-      }
-   }
+    // Populate all data fields
+    valueParams[0] = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES);
+    valueParams[1] = symbol;
+    valueParams[2] = ticket;
+    valueParams[3] = (alertComment == "") ? "None" : alertComment;
+    valueParams[4] = IntegerToString(alertSwitch);
+    valueParams[5] = IntegerToString(alertSwitchPrev);
+    valueParams[6] = IntegerToString(triggerEntryDirection);
+    valueParams[7] = "7"; // MagicNo for simulated trades
+    valueParams[8] = "0.0";
+    valueParams[9] = "0.0";
+    valueParams[10] = DoubleToString(openPrice, _Digits);
+    valueParams[11] = DoubleToString(closePrice, _Digits);
+    valueParams[12] = DoubleToString(lotSize, 2);
+    valueParams[13] = "0.00";
+    valueParams[14] = "0.00";
+    valueParams[15] = DoubleToString(pl, 2);
+    valueParams[16] = (purpose == "" || purpose == "Closed Position") ? 
+                     GetPurposeFromTriggerEntryDirection(triggerEntryDirection) : purpose;
+    
+    // Fill remaining fields with defaults
+    for(int i = 17; i < ArraySize(valueParams); i++)
+    {
+        if(valueParams[i] == "" || StringLen(valueParams[i]) == 0)
+        {
+            if(StringFind(headerParams[i], "Time") >= 0)
+                valueParams[i] = TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES);
+            else if(StringFind(headerParams[i], "Identifier") >= 0 || 
+                    StringFind(headerParams[i], "Type") >= 0 || 
+                    StringFind(headerParams[i], "Stoch_Xover") >= 0 || 
+                    StringFind(headerParams[i], "DeM_trendShiftResult") >= 0)
+                valueParams[i] = "None";
+            else
+                valueParams[i] = "0";
+        }
+    }
 
-    if(!WriteFile_EntryData(valueParams, StringToInteger(StringSubstr(ticket, 1)), csvTradeLog_handle)) // Convert Sxxxxx to integer
-   {
-      LogSymbolToFile("WriteSimulatedClosedPositionToFile: Failed to write simulated closed position: " + ticket);
-   }
-   else
-   {
-      LogSymbolToFile("WriteSimulatedClosedPositionToFile: Successfully wrote simulated closed position: " + ticket + 
-                      ", purpose=" + valueParams[16] + ", alertcomment=" + alertComment + 
-                      ", alertswitch=" + IntegerToString(alertSwitch) + 
-                      ", Trigger_EntryDirection=" + IntegerToString(triggerEntryDirection) + 
-                      ", P&L=" + DoubleToString(pl, 2));
-   }
+    // Build the complete data line
+    string dataLine = "";
+    for(int i = 0; i < ArraySize(valueParams); i++)
+    {
+        dataLine += valueParams[i];
+        if(i < ArraySize(valueParams) - 1) dataLine += "\t";
+    }
+
+    // Atomic file operation
+    int handle = FileOpen(csvTradeLog_fileName, FILE_READ|FILE_WRITE|FILE_CSV|FILE_COMMON|FILE_ANSI, "\t");
+    if(handle != INVALID_HANDLE)
+    {
+        // Move to end (in case someone else wrote to the file)
+        FileSeek(handle, 0, SEEK_END);
+        
+        // Write the data
+        if(FileWrite(handle, dataLine) > 0)
+        {
+            FileFlush(handle); // Force write to disk
+            LogSymbolToFile("Successfully wrote closed position: " + ticket + ", P&L: " + DoubleToString(pl, 2));
+        }
+        else
+        {
+            LogSymbolToFile("Write failed for closed position: " + ticket + ", error: " + IntegerToString(GetLastError()));
+        }
+        
+        FileClose(handle);
+    }
+    else
+    {
+        LogSymbolToFile("Failed to open file for closed position: " + csvTradeLog_fileName + ", error: " + IntegerToString(GetLastError()));
+    }
 }
