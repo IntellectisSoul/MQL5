@@ -22,6 +22,7 @@ extern string valueParams[];
 
 
 /* XXXXXX-
+   2.Sept.2025 : works well. but in order to reduce redundancy, has been depracated because ManagePositionLogging() inside Trade Monitor.mqh has already incorporated relevant simulated checks.
    14.Aug.2025 :Fixed writing of SiMULATED to csv.
    
    */
